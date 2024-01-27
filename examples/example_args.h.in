@@ -1,0 +1,3 @@
+ARGUMENT(arg1, int, 3, "a|arg1", "just an integer")
+ARGUMENT(arg2, cstr, "toto", "b|arg2", "just an string")
+ARGUMENT(arg3, bool, true, "boolean", "just a bool")
