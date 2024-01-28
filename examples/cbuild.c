@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     cbuild_str_builder_append_cstr(&sb, "/example_args.h.in\"");
     char *macro_path_to_cargs = cbuild_str_builder_to_cstr(&sb);
 
-    cbuild_str_vector_add_strs(&example.command, "cc", "-Wall", "-Wextra", "-g", macro_path_to_cargs);
+    cbuild_str_vector_add_strs(&example.command, "cc", "-Wall", "-pedantic", "-Wextra", "-g", macro_path_to_cargs);
 
     if (cbuild_build_target(&example, NULL))
     {

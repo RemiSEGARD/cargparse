@@ -137,6 +137,7 @@ typedef enum
     CARGPARSE_NO_ERROR,
     CARGPARSE_UNKNOWN_ARG,
     CARGPARSE_WRONG_VALUE_TYPE,
+    CARGPARSE_MISSING_VALUE,
     CARGPARSE_PRINT_HELP,
 } cargparse_error;
 
@@ -337,7 +338,8 @@ int cargparse_setup_args(char *usage_str)
 static char *error_string[] =
 {
     [CARGPARSE_UNKNOWN_ARG] = "Unknown argument",
-    [CARGPARSE_WRONG_VALUE_TYPE] = "Wrong value type for"
+    [CARGPARSE_WRONG_VALUE_TYPE] = "Wrong value type for",
+    [CARGPARSE_MISSING_VALUE] = "Missing argument value for",
 };
 
 void cargparse_print_help(cargparse_error error, const char *wrong_arg)
@@ -350,8 +352,7 @@ void cargparse_print_help(cargparse_error error, const char *wrong_arg)
     };
     static char *args_types[] = {
 #define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) #TYPE,
-ARGUMENT(,,,,)
-    ""
+        "",
 #include CARG_LOCATION
 #undef ARGUMENT
     };
@@ -396,6 +397,8 @@ ARGUMENT(,,,,)
 
 int cargparse_parse_str_vec_arg(char *arg, void *data)
 {
+    if (arg == NULL)
+        return CARGPARSE_MISSING_VALUE;
     cargparse_str_vector vector = { 0 };
     char *str = strtok(arg, ",");
     cargparse_str_vector_add_str(&vector, str);
@@ -415,6 +418,8 @@ int cargparse_parse_bool_arg(__attribute((unused))char *arg, void *data)
 
 int cargparse_parse_cstr_arg(char *arg, void *data)
 {
+    if (arg == NULL)
+        return CARGPARSE_MISSING_VALUE;
     const char **dest = data;
     *dest = arg;
     return CARGPARSE_NO_ERROR;
@@ -422,6 +427,8 @@ int cargparse_parse_cstr_arg(char *arg, void *data)
 
 int cargparse_parse_int_arg(char *arg, void *data)
 {
+    if (arg == NULL)
+        return CARGPARSE_MISSING_VALUE;
     int *dest = data;
     char *endptr = NULL;
     *dest = (int)strtol(arg, &endptr, 10);
