@@ -9,10 +9,21 @@
 #endif
 
 typedef char *cstr;
+typedef struct
+{
+    char **strs;
+    size_t size;
+    size_t capacity;
+} cargparse_str_vector;
+
+typedef cargparse_str_vector str_vec;
 
 #define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) TYPE NAME;
 #include CARG_LOCATION
 #undef ARGUMENT
+
+void cargparse_str_vector_add_str(cargparse_str_vector *vec, char *str);
+char *cargparse_str_vector_get(cargparse_str_vector *vec, size_t index);
 
 typedef struct
 {
@@ -25,7 +36,7 @@ int cargparse_str_view_eq(const cargparse_str_view *s1,
 cargparse_str_view cargparse_str_view_from_cstr(const char *cstr);
 cargparse_str_view cargparse_cstr_split(char **ptr, const char *delim);
 
-typedef int(*cargparse_parse_type_arg_f)(const char *, void *);
+typedef int(*cargparse_parse_type_arg_f)(char *, void *);
 typedef struct cargparse_arg_map_item
 {
     cargparse_str_view name;
@@ -50,6 +61,7 @@ typedef enum
     CARGPARSE_NO_ERROR,
     CARGPARSE_UNKNOWN_ARG,
     CARGPARSE_WRONG_VALUE_TYPE,
+    CARGPARSE_PRINT_HELP,
 } cargparse_error;
 
 static inline int cargparse_streq(const char *s1, const char *s2);
@@ -59,11 +71,12 @@ int cargparse_register_arg(const cargparse_str_view *arg,
                            void *data);
 void cargparse_print_help(cargparse_error error, const char *wrong_arg);
 
-int cargparse_parse_bool_arg(const char *arg, void *data);
-int cargparse_parse_cstr_arg(const char *arg, void *data);
-int cargparse_parse_int_arg(const char *arg, void *data);
+int cargparse_parse_str_vec_arg(char *arg, void *data);
+int cargparse_parse_bool_arg(char *arg, void *data);
+int cargparse_parse_cstr_arg(char *arg, void *data);
+int cargparse_parse_int_arg(char *arg, void *data);
 
-int cargparse_setup_args();
+int cargparse_setup_args(char *usage_str);
 
 char *cargparse_shift_args(int *argc, char **argv[]);
 cargparse_str_view cargparse_get_arg_name(const char *str, int *is_equal_arg);
@@ -86,6 +99,26 @@ int cargparse_parse_args(int *argc, char **argv[]);
 static inline int cargparse_streq(const char *s1, const char *s2)
 {
     return strcmp(s1, s2) == 0;
+}
+
+void cargparse_str_vector_add_str(cargparse_str_vector *vec, char *str)
+{
+    if (vec->capacity == 0 && vec->strs == NULL)
+    {
+        vec->strs = calloc(8, sizeof(char *));
+        vec->capacity = 8;
+    }
+    if (vec->size == vec->capacity)
+    {
+        vec->strs = realloc(vec->strs, vec->capacity * 2 * sizeof(char *));
+        vec->capacity *= 2;
+    }
+    vec->strs[vec->size++] = str;
+}
+
+char *cargparse_str_vector_get(cargparse_str_vector *vec, size_t index)
+{
+    return vec->strs[index];
 }
 
 int cargparse_str_view_eq(const cargparse_str_view *s1,
@@ -149,8 +182,11 @@ int cargparse_register_arg(const cargparse_str_view *arg,
     return 0;
 }
 
-int cargparse_setup_args()
+char *cargparse_usage_string = NULL;
+
+int cargparse_setup_args(char *usage_str)
 {
+    cargparse_usage_string = usage_str;
     cargparse_args_data.items = calloc(10, sizeof(cargparse_arg_map_item));
     cargparse_args_data.capacity = 10;
 
@@ -170,33 +206,83 @@ int cargparse_setup_args()
 static char *error_string[] =
 {
     [CARGPARSE_UNKNOWN_ARG] = "Unknown argument",
-    [CARGPARSE_WRONG_VALUE_TYPE] = "Wrong value type for "
+    [CARGPARSE_WRONG_VALUE_TYPE] = "Wrong value type for"
 };
 
 void cargparse_print_help(cargparse_error error, const char *wrong_arg)
 {
-    if (wrong_arg != NULL)
+    static char *args_args[] = {
+#define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) ARGS,
+#include CARG_LOCATION
+#undef ARGUMENT
+    };
+    static char *args_types[] = {
+#define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) #TYPE,
+#include CARG_LOCATION
+#undef ARGUMENT
+    };
+    static char *args_descs[] = {
+#define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) DESC,
+#include CARG_LOCATION
+#undef ARGUMENT
+    };
+
+    if (wrong_arg != NULL && error != CARGPARSE_PRINT_HELP)
+        printf("%s `%s'\n", error_string[error], wrong_arg);
+
+    if (cargparse_usage_string != NULL)
+        puts(cargparse_usage_string);
+
+    puts("OPTIONS:");
+    for (size_t i = 0; i < sizeof(args_args) / sizeof(*args_args); i++)
     {
-        fprintf(stderr, "%s `%s'", error_string[error], wrong_arg);
+        int printed = 0;
+        cargparse_str_view sv = { 0 };
+        char *arg = args_args[i];
+        printed += printf(" ");
+        while ((sv = cargparse_cstr_split(&arg, "|")).str != NULL)
+        {
+            if (printed > 1)
+                printed += printf(",");
+            if (sv.size == 1)
+                printed += printf("-");
+            else
+                printed += printf("--");
+            printed += fwrite(sv.str, sizeof(char), sv.size, stdout);
+        }
+        printf("%*s (%s) %s\n", 30 - printed, "", args_types[i], args_descs[i]);
     }
-    exit(error);
+
+    exit(error == CARGPARSE_PRINT_HELP ? 0 : 1);
 }
 
-int cargparse_parse_bool_arg(__attribute((unused))const char *arg, void *data)
+int cargparse_parse_str_vec_arg(char *arg, void *data)
+{
+    cargparse_str_vector vector = { 0 };
+    char *str = strtok(arg, ",");
+    cargparse_str_vector_add_str(&vector, str);
+    while ((str = strtok(NULL, ",")) != NULL)
+        cargparse_str_vector_add_str(&vector, str);
+    cargparse_str_vector *dest = data;
+    *dest = vector;
+    return CARGPARSE_NO_ERROR;
+}
+
+int cargparse_parse_bool_arg(__attribute((unused))char *arg, void *data)
 {
     bool *dest = data;
     *dest = !*dest;
     return CARGPARSE_NO_ERROR;
 }
 
-int cargparse_parse_cstr_arg(const char *arg, void *data)
+int cargparse_parse_cstr_arg(char *arg, void *data)
 {
     const char **dest = data;
     *dest = arg;
     return CARGPARSE_NO_ERROR;
 }
 
-int cargparse_parse_int_arg(const char *arg, void *data)
+int cargparse_parse_int_arg(char *arg, void *data)
 {
     int *dest = data;
     char *endptr = NULL;
@@ -244,6 +330,8 @@ int cargparse_parse_argument(char *arg, int *argc, char **argv[])
     int is_equal_arg = 0;
     cargparse_str_view arg_name =
         cargparse_get_arg_name(arg, &is_equal_arg);
+    if (strncmp(arg_name.str, "help", arg_name.size) == 0)
+        return CARGPARSE_PRINT_HELP;
     cargparse_arg_map_item *arg_item = cargparse_arg_map_item_get(&arg_name);
     if (arg_item == NULL)
         return CARGPARSE_UNKNOWN_ARG;
