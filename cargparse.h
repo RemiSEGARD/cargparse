@@ -213,16 +213,20 @@ void cargparse_print_help(cargparse_error error, const char *wrong_arg)
 {
     static char *args_args[] = {
 #define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) ARGS,
+        "help",
 #include CARG_LOCATION
 #undef ARGUMENT
     };
     static char *args_types[] = {
 #define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) #TYPE,
+ARGUMENT(,,,,)
+    ""
 #include CARG_LOCATION
 #undef ARGUMENT
     };
     static char *args_descs[] = {
 #define ARGUMENT(NAME, TYPE, DEFAULT_VALUE, ARGS, DESC) DESC,
+        "prints this message",
 #include CARG_LOCATION
 #undef ARGUMENT
     };
@@ -231,7 +235,7 @@ void cargparse_print_help(cargparse_error error, const char *wrong_arg)
         printf("%s `%s'\n", error_string[error], wrong_arg);
 
     if (cargparse_usage_string != NULL)
-        puts(cargparse_usage_string);
+        printf("USAGE: %s\n", cargparse_usage_string);
 
     puts("OPTIONS:");
     for (size_t i = 0; i < sizeof(args_args) / sizeof(*args_args); i++)
@@ -250,7 +254,10 @@ void cargparse_print_help(cargparse_error error, const char *wrong_arg)
                 printed += printf("--");
             printed += fwrite(sv.str, sizeof(char), sv.size, stdout);
         }
-        printf("%*s (%s) %s\n", 30 - printed, "", args_types[i], args_descs[i]);
+        printf("%*s ", 30 - printed, "");
+        if (args_types[i][0] != '\0')
+            printf("(%s) ", args_types[i]);
+        printf("%s\n", args_descs[i]);
     }
 
     exit(error == CARGPARSE_PRINT_HELP ? 0 : 1);
@@ -325,8 +332,29 @@ cargparse_str_view cargparse_get_arg_name(const char *str, int *is_equal_arg)
     return res;
 }
 
+int cargparse_parse_small_arg(char *arg, int *argc, char **argv[])
+{
+    cargparse_str_view arg_name = { .str = arg + 1, .size = 1 };
+    while (arg_name.str[0] != '\0')
+    {
+        cargparse_arg_map_item *arg_item =
+                cargparse_arg_map_item_get(&arg_name);
+        if (arg_item == NULL)
+            return CARGPARSE_UNKNOWN_ARG;
+        if (arg_item->needs_value)
+            arg = cargparse_shift_args(argc, argv);
+        cargparse_error error = arg_item->parse_function(arg, arg_item->data);
+        if (error)
+            return error;
+        arg_name.str += 1;
+    }
+    return CARGPARSE_NO_ERROR;
+}
+
 int cargparse_parse_argument(char *arg, int *argc, char **argv[])
 {
+    if (arg[1] != '-')
+        return cargparse_parse_small_arg(arg, argc, argv);
     int is_equal_arg = 0;
     cargparse_str_view arg_name =
         cargparse_get_arg_name(arg, &is_equal_arg);

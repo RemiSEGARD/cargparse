@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[])
 {
-    cargparse_setup_args("Usage: example [OPTIONS|ARGS...]");
+    cargparse_setup_args("example [OPTIONS|ARGS...]");
     cargparse_parse_args(&argc, &argv);
 
     printf("--> arg1 = %d!\n", arg1);
