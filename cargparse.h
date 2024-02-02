@@ -513,7 +513,7 @@ int cargparse_parse_argument(char *arg, int *argc, char **argv[])
 int cargparse_parse_args(int *argc, char **argv[])
 {
     char **argv_begin = *argv;
-    int final_argc = 0;
+    int final_argc = 1;
     cargparse_shift_args(argc, argv);
     char *arg = NULL;
     while ((arg = cargparse_shift_args(argc, argv)) != NULL)
