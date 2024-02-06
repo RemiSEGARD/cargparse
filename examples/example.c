@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
     printf("- arg1 = %d!\n", arg1);
     printf("- arg2 = %s!\n", arg2);
     printf("- boolean = %i!\n", arg3);
+    printf("- link_dir = %s!\n", link_dir);
     printf("- strs = (size %lu)", arg4.size);
     if (arg4.size > 0)
     {

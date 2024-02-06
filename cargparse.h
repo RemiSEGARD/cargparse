@@ -473,14 +473,26 @@ cargparse_str_view cargparse_get_arg_name(const char *str, int *is_equal_arg)
 int cargparse_parse_small_arg(char *arg, int *argc, char **argv[])
 {
     cargparse_str_view arg_name = { .str = arg + 1, .size = 1 };
+    cargparse_arg_map_item *arg_item =
+            cargparse_arg_map_item_get(&arg_name);
+    if (arg_item == NULL)
+        return CARGPARSE_UNKNOWN_ARG;
+    if (arg_item->needs_value)
+    {
+        if (arg[2] == '\0')
+            arg = cargparse_shift_args(argc, argv);
+        else
+            arg += 2;
+        return arg_item->parse_function(arg, arg_item->data);
+    }
+    // This loop should only be used by boolean arguments.
     while (arg_name.str[0] != '\0')
     {
-        cargparse_arg_map_item *arg_item =
-                cargparse_arg_map_item_get(&arg_name);
+        arg_item = cargparse_arg_map_item_get(&arg_name);
         if (arg_item == NULL)
             return CARGPARSE_UNKNOWN_ARG;
         if (arg_item->needs_value)
-            arg = cargparse_shift_args(argc, argv);
+            return CARGPARSE_WRONG_VALUE_TYPE;
         cargparse_error error = arg_item->parse_function(arg, arg_item->data);
         if (error)
             return error;
